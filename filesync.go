@@ -80,10 +80,10 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
-	// 开始监听跟踪列表
+	// 开始监听tracks列表
 	go syncfileFunc()
 
-	// 监听文件变化，并保存到tracks字典中
+	// 监听文件变化，并保存到tracks列表中
 	for {
 		select {
 		case ev := <-fw.Event:
