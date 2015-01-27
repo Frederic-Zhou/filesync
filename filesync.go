@@ -24,8 +24,7 @@ var fw *fsnotify.Watcher
 
 func main() {
 
-	log.Println("Reading config")
-
+	/*======================================*/
 	confdata, err := ioutil.ReadFile("./filesync.conf")
 	if err != nil {
 		log.Fatalln(err.Error())
@@ -62,11 +61,20 @@ func main() {
 	}
 
 	log.Println("Readed config")
-	log.Println("Start Watch")
 	log.Println("remoteHost", remoteHost, "port", sshPort)
 	log.Println("syncPath", syncPath)
 	log.Println("targetPath", targetPath)
 	log.Println("excludePath", excludePath)
+	/*======================================*/
+
+	// 判断路径是否存在，路径是否是目录
+	fi, err := os.Stat(syncPath)
+	if err != nil {
+		log.Fatalln(err.Error(), syncPath)
+	}
+	if !fi.IsDir() {
+		log.Fatalln("not a dir", syncPath)
+	}
 
 	// 创建一个新的文件观察者
 	fw, err = fsnotify.NewWatcher()
@@ -108,8 +116,12 @@ func getPathsFunc(path string, info os.FileInfo, err error) error {
 				return err
 			}
 		}
-		fw.Watch(path)
-		log.Println("watching:", path)
+		err = fw.Watch(path)
+		if err != nil {
+			log.Printf("watch error:", err.Error())
+		} else {
+			log.Println("watching:", path)
+		}
 	}
 	return err
 }
