@@ -24,6 +24,8 @@ var fw *fsnotify.Watcher
 
 func main() {
 
+	log.Println("Reading config")
+
 	confdata, err := ioutil.ReadFile("./filesync.conf")
 	if err != nil {
 		log.Fatalln(err.Error())
@@ -59,6 +61,7 @@ func main() {
 		log.Fatalln(err.Error())
 	}
 
+	log.Println("Readed config")
 	log.Println("Start Watch")
 	log.Println("remoteHost", remoteHost, "port", sshPort)
 	log.Println("syncPath", syncPath)
