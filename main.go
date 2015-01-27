@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	gjson "github.com/bitly/go-simplejson"
 	"github.com/golang/exp/fsnotify"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,9 +15,10 @@ import (
 
 var tracks []string
 var m sync.Mutex
-var syncpath string
+var syncPath string
+var targetPath string
 var remoteHost string
-var targetpath string
+var sshPort string
 var excludePath []string
 var fw *fsnotify.Watcher
 
@@ -25,52 +26,55 @@ func main() {
 
 	confdata, err := ioutil.ReadFile("./filesync.conf")
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(0)
+		log.Fatalln(err.Error())
 	}
 
 	conf, err := gjson.NewJson(confdata)
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
+		log.Fatalln(err.Error())
 	}
 
-	syncpath, err = conf.Get("syncpath").String()
+	syncPath, err = conf.Get("syncpath").String()
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(10)
+		log.Fatalln(err.Error())
 	}
 
-	targetpath, err = conf.Get("targetpath").String()
+	targetPath, err = conf.Get("targetpath").String()
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(11)
+		log.Fatalln(err.Error())
 	}
 
 	remoteHost, err = conf.Get("remotehost").String()
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(12)
+		log.Fatalln(err.Error())
 	}
 
 	excludePath, err = conf.Get("excludepath").StringArray()
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(14)
+		log.Fatalln(err.Error())
 	}
 
-	fmt.Println("Start Watch", syncpath, "\r\n", "To", remoteHost+":"+syncpath)
+	sshPort, err = conf.Get("sshport").String()
+	if err != nil {
+		log.Fatalln(err.Error())
+	}
+
+	log.Println("Start Watch")
+	log.Println("remoteHost", remoteHost, "port", sshPort)
+	log.Println("syncPath", syncPath)
+	log.Println("targetPath", targetPath)
+	log.Println("excludePath", excludePath)
 
 	// 创建一个新的文件观察者
 	fw, err = fsnotify.NewWatcher()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatalln(err.Error())
 	}
 
 	//爬行出所有目录和子目录
-	err = filepath.Walk(syncpath, getPathsFunc)
+	err = filepath.Walk(syncPath, getPathsFunc)
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Fatalln(err.Error())
 	}
 
 	// 开始监听跟踪列表
@@ -87,10 +91,9 @@ func main() {
 				m.Unlock()
 			}
 		case err := <-fw.Error:
-			fmt.Println("error:", err)
+			log.Println("error:", err)
 		}
 	}
-
 }
 
 //获取爬行的路径函数
@@ -103,33 +106,33 @@ func getPathsFunc(path string, info os.FileInfo, err error) error {
 			}
 		}
 		fw.Watch(path)
-		fmt.Println("watching:", path)
+		log.Println("watching:", path)
 	}
 	return err
 }
 
 //每2秒处理一次所有监听到的文件
 func syncfileFunc() {
-	fmt.Println("Start syncFile")
+	log.Println("Start syncFile")
 	for {
 		if len(tracks) > 0 {
 			// 打印出当前跟踪列表，便于调试
-			//fmt.Println("current list:", tracks)
+			//log.Println("current list:", tracks)
 			m.Lock()
 			info := strings.Split(tracks[0], ":")
 			f := strings.Trim(info[0], "\"")
 			a := strings.Trim(info[1], " ")
 
 			if a == "CREATE" || a == "MODIFY" {
-				cmdFunc("scp", "-r", f, remoteHost+":"+strings.Replace(f, syncpath, targetpath, 0))
+				cmdFunc("scp", "-P", sshPort, "-r", f, remoteHost+":"+strings.Replace(f, syncPath, targetPath, 0))
 				err := filepath.Walk(f, getPathsFunc)
 				if err != nil {
-					fmt.Println(err.Error())
+					log.Println(err.Error())
 				}
-				fmt.Println("scp", "-r", f, remoteHost+":"+strings.Replace(f, syncpath, targetpath, 0))
+				log.Println("scp", "-P", sshPort, "-r", f, remoteHost+":"+strings.Replace(f, syncPath, targetPath, 0))
 			} else if a == "DELETE" || a == "RENAME" {
-				cmdFunc("ssh", remoteHost, "rm", "-rf", strings.Replace(f, syncpath, targetpath, 0))
-				fmt.Println("ssh", remoteHost, "rm", "-rf", strings.Replace(f, syncpath, targetpath, 0))
+				cmdFunc("ssh", "-p", sshPort, remoteHost, "rm", "-rf", strings.Replace(f, syncPath, targetPath, 0))
+				log.Println("ssh", "-p", sshPort, remoteHost, "rm", "-rf", strings.Replace(f, syncPath, targetPath, 0))
 			}
 
 			tracks = tracks[1:]
@@ -144,9 +147,9 @@ func cmdFunc(cmdstr string, args ...string) {
 	cmd := exec.Command(cmdstr, args...)
 	output, err := cmd.Output()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 	}
 	if len(output) > 0 {
-		fmt.Println(string(output))
+		log.Println(string(output))
 	}
 }
